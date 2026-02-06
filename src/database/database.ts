@@ -1,0 +1,1 @@
+//!Global: Conexion y migraciones (TypeORM, Prisma, Mongoose)

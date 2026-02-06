@@ -1,0 +1,1 @@
+//!Global: configuracion de variables de entorno y constantes
