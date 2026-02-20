@@ -1,20 +1,20 @@
-import { Body, Controller, Delete, Param, ParseIntPipe, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Param, ParseIntPipe, Post, Put, UsePipes } from '@nestjs/common';
 import { Get } from '@nestjs/common';
 import { TaskService } from './task.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 
 @Controller('api/tasks')
+//@UsePipes(ValidationPipe) realizar un pipe de manera interna
 export class TaskController {
   constructor(private taskSvc: TaskService) {}
 
   @Get()
-  public getTasks(): any[] {
-    return this.taskSvc.getTasks();
+  public async getTasks(): Promise<any[]> {
+    return await this.taskSvc.getTasks();
   }
 
   @Get(":id")
-  public getTasksById(@Param("id", ParseIntPipe) id: number): any {
-    console.log(typeof id);
+  public getTasksById(@Param("id", ParseIntPipe) id: number): string {
     return this.taskSvc.getTaskById(id);
   }
 
