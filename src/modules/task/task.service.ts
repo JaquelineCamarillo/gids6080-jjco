@@ -1,13 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { CreateTaskDto } from './dto/create-task.dto';
-
+import { promises } from 'dns';
+import { error } from 'console';
+import { errorContext } from 'rxjs/internal/util/errorContext';
 
 @Injectable()
 export class TaskService {
-
-  constructor(
-    @Inject('MYSQL_CONNECTION') private db: any,
-  ) {}
+  constructor(@Inject('MYSQL_CONNECTION') private db: any) {}
 
   private tasks: any[] = [];
 
@@ -18,39 +17,57 @@ export class TaskService {
     return result;
   }
 
-  public getTaskById(id: number): string {
-    var task = this.tasks.find((t) => t.id === id);
-    return `Tarea con el id: ${id}`;
+
+
+  public async getTaskById(id: number): Promise<any> {
+    const query = 'SELECT * FROM tasks WHERE id = ';
+    const result = await this.db.query(query, [id]);
+    return result.rows[0] ;
   }
 
-  public insert(task: CreateTaskDto): any {
-    var id = this.tasks.length + 1;
-    var insertedTask = this.tasks.push({
-      ...task,
-      id,
-    });
+
+
+  public async insert(task: CreateTaskDto): Promise<any> {
+    //agregar el query
+    const sql = `INSERT INTO tasks (name, description, priority, user_id) 
+    VALUES ('${task.name}', '${task.description}', ${task.priority}, ${task.user_id})`;
     
-    return this.tasks[insertedTask - 1];
+    console.log(sql);
+
+    const [result] = await this.db.query(sql);
+    const insertId = result.insertId;
+
+    console.log(insertId);
+    console.log (errorContext)
+
+    const row = await this.getTaskById(insertId);
+    return row;
   }
 
-  public update(id: number, task: any) {
-    const taskUpdate = this.tasks.map(t => {
-      if (t.id == id) {
 
-        if (task.name) t.name = task.name;
-        if (task.description) t.description = task.description;
-        if (task.priority) t.priority = task.priority;
 
-        return t;
-      }
-      return t;
-    });
-    return taskUpdate;
+
+  public async update(id: number, taskUpdate: any): Promise<any> {
+    const task = await this.getTaskById(id);
+    
+    task.name = taskUpdate.name ? taskUpdate.name : task.name;
+    task.description = taskUpdate.description ??  task.description;
+    task.priority = taskUpdate.priority ? taskUpdate.priority : task.priority;
+
+
+    //Convertir el objeto a un SET
+    //{name : 'abc', description: 'abc'}
+    //name =  '', description = ''
+    const set = Object.keys(taskUpdate)
+    .map((key) => `${key} = '${taskUpdate[key]}'`)
+    .join(', ');
   }
+
+
 
   public delete(id: number): string {
-    const array = this.tasks.filter(t => t.id !== id);
+    const array = this.tasks.filter((t) => t.id !== id);
     this.tasks = array;
-    return "Tarea eliminada correctamente";
+    return 'Tarea eliminada correctamente';
   }
 }
