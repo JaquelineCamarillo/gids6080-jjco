@@ -4,9 +4,10 @@
 // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
+//schema.prisma
+
 generator client {
   provider = "prisma-client-js"
-  
 }
 
 datasource db {
@@ -14,21 +15,23 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String   @db.VarChar(200)
-  lastName  String   @db.VarChar(250)
-  username  String   @db.VarChar(100) 
-  password  String
-  created_at DateTime @default(now())
-  tasks     Task[]
+  id           Int      @id @default(autoincrement())
+  name         String   @db.VarChar(200)
+  lastName     String   @db.VarChar(250)
+  username     String   @db.VarChar(100)
+  password     String
+  refreshToken String?  @db.Text
+  created_at   DateTime @default(now())
+  tasks        Task[]
+  
 }
 
 model Task {
   id          Int      @id @default(autoincrement())
-  name       String   @db.VarChar(150)
+  name        String   @db.VarChar(150)
   description String   @db.VarChar(200)
   priority    Boolean
-  created_at   DateTime @default(now())
+  created_at  DateTime @default(now())
   user_id     Int
-  user User @relation(fields: [user_id], references: [id])  
+  user        User     @relation(fields: [user_id], references: [id])
 }

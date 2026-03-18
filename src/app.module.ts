@@ -1,3 +1,4 @@
+//app.module.ts
 import { Module } from '@nestjs/common';
 import { AuthModule } from './modules/auth/auth.module';
 import { TaskModule } from './modules/task/task.module';
@@ -8,7 +9,8 @@ import { UserModule } from './modules/user/user.module';
   imports: [
     AuthModule,
     TaskModule,
-    UserModule
+    UserModule,
+
   ],
 })
 export class AppModule {}
