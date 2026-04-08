@@ -1,9 +1,8 @@
 export class Task {
-    id: number;
-    name: string;
-    description: string;
-    priority: boolean;
-    created_at: Date;
-    user_id: number;
-
+  id!: number;
+  name!: string;
+  description!: string;
+  priority!: boolean;
+  created_dt!: Date;  // ✅ corregido de created_at
+  user_id!: number;
 }

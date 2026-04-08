@@ -1,38 +1,58 @@
 //auth.controller.ts
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  Get,
+  UseGuards,
+  HttpStatus,
+  Req,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthDto } from './dto/auth.dto';
-import { UserService } from '../user/user.service';
-import { UtilService } from 'src/common/services/util.service'; 
-import { request } from 'https';
-import { AuthGuard } from 'src/common/guards/auth.guard';
+import { ApiOperation } from '@nestjs/swagger';
+import { AuthGuard } from '../../common/guards/auth.guard';
+import { AppException } from '../../common/exceptions/app.exception';
 
-@ApiTags('auth')
 @Controller('api/auth')
 export class AuthController {
-  constructor(private readonly authSvc: AuthService) {}
+  constructor(private authSvc: AuthService) {}
 
   @Post('login')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login to the application' })
-  public async login(@Body() auth: AuthDto): Promise<any>{
-    const user = await this.authSvc.getUserBYUsername(auth.username);
-    if (!user)
-      throw new UnauthorizedException('Invalid credentials');
-    if (await this.utilSvc.checkPassword(auth.password)){
-      
-    }
-
+  @HttpCode(200)
+  async login(@Body() loginDto: AuthDto): Promise<any> {
+    return this.authSvc.login(loginDto);
   }
 
-  @Get("Me")
-  @ApiOperation({ summary: 'Get the current user' })
+  @Get('me')
+  @ApiOperation({
+    summary: 'Extrae el id del usuario desde el token y busca la información',
+  })
   @UseGuards(AuthGuard)
-  public getProfile (@Req() request: any) {
-    const user = request['user'];
-    return user;
+  public getProfile() {}
+
+  @Post('refresh-token')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthGuard)
+  public async refreshToken(@Req() request: any) {
+    const userSession = request.user;
+    const user = await this.authSvc.getUserById(userSession.id);
+
+    if (!user || !user.hash)
+      throw new AppException('Acceso denegado', HttpStatus.FORBIDDEN, '0');
+
+    if (userSession.hash != user.hash)
+      throw new AppException('Token invalido', HttpStatus.FORBIDDEN, '1');
+
+    return { access_token: '', refreshToken: '' };
   }
 
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(AuthGuard)
+  public async logout(@Req() request: any) {
+    const userSession = request.user;
+    return await this.authSvc.updateHash(userSession.id, null);
+  }
 }
- 

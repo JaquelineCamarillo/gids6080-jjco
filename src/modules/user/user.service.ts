@@ -1,15 +1,14 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
-import { PrismaService } from 'src/common/services/prisma.service';
+import { PrismaService } from '../../services/prisma.service'; // ✅ ruta corregida
 import { Task } from '../task/entities/task.entity';
 
 @Injectable()
 export class UserService {
   constructor(
-    @Inject('MYSQL_CONNECTION') private db: any,
-    private prisma: PrismaService,
+    private prisma: PrismaService, // ✅ eliminado @Inject('MYSQL_CONNECTION')
   ) {}
 
   public async getUsers(currentUserId: number): Promise<User[]> {
@@ -18,18 +17,16 @@ export class UserService {
       select: {
         id: true,
         name: true,
-        lastName: true,
+        lastname: true,      // ✅ corregido de lastName
         username: true,
-        password: false,
-        created_at: true,
+        created_dt: true,    // ✅ corregido de created_at
+        refreshToken: true,  // ✅ agregado (requerido por User entity)
       },
-      where:{
-        id:{
-          not :currentUserId
-        }
+      where: {
+        id: { not: currentUserId }
       }
     });
-    return users;
+    return users as User[];
   }
 
   public async getUserById(id: number): Promise<User | null> {
@@ -38,35 +35,34 @@ export class UserService {
       select: {
         id: true,
         name: true,
-        lastName: true,
+        lastname: true,      // ✅ corregido
         username: true,
-        password: false,
-        created_at: true,
+        created_dt: true,    // ✅ corregido
+        refreshToken: true,  // ✅ agregado
       },
     });
-    return user;
+    return user as User | null;
   }
 
   public async getUserByUsername(username: string): Promise<User[]> {
-    const user = await this.prisma.user.findMany({
+    const users = await this.prisma.user.findMany({
       where: { username },
       select: {
         id: true,
         name: true,
-        lastName: true,
+        lastname: true,      // ✅ corregido
         username: true,
-        password: false,
-        created_at: true,
+        created_dt: true,    // ✅ corregido
+        refreshToken: true,  // ✅ agregado
       },
     });
-    return user;
+    return users as User[];
   }
 
   public async getTasksByUser(id: number): Promise<Task[]> {
-    const tasks = await this.prisma.task.findMany({
+    return await this.prisma.task.findMany({
       where: { user_id: id },
     });
-    return tasks;
   }
 
   public async insert(user: CreateUserDto): Promise<User> {
@@ -75,13 +71,13 @@ export class UserService {
       select: {
         id: true,
         name: true,
-        lastName: true,
+        lastname: true,      // ✅ corregido
         username: true,
-        password: false,
-        created_at: true,
+        created_dt: true,    // ✅ corregido
+        refreshToken: true,  // ✅ agregado
       },
     });
-    return newUser;
+    return newUser as User;
   }
 
   public async update(id: number, userUpdate: UpdateUserDto): Promise<User> {
@@ -89,14 +85,12 @@ export class UserService {
       where: { id },
       data: userUpdate,
     });
-    return user;
+    return user as User;
   }
 
   public async delete(id: number): Promise<Boolean> {
     try {
-      await this.prisma.user.delete({
-        where: { id },
-      });
+      await this.prisma.user.delete({ where: { id } });
     } catch (error) {
       throw new Error('User not found');
     }

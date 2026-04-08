@@ -1,12 +1,15 @@
-import { Task } from "src/modules/task/entities/task.entity";
+//user.entity.ts
+import { Task } from "../../task/entities/task.entity";
 
-export class User{
-    id: number;
-    name: string;
-    lastName: string;
-    username: string;
-    password?: string;
-    created_at: Date;
+// user.entity.ts
+export class User {
+  id!: number;
+  name!: string;
+  lastname!: string;
+  username!: string;
+  password?: string;
+  hash?: string;
+  created_dt!: Date;
+  refreshToken!: string;
+  rol_id?: number | null;
 }
-
-
