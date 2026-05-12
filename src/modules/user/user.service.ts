@@ -1,99 +1,136 @@
-import { Injectable } from '@nestjs/common';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+// src/modules/user/user.service.ts
+import { Injectable, Inject, NotFoundException, ConflictException } from '@nestjs/common';
+import { PrismaService } from '../../services/prisma.service';
 import { User } from './entities/user.entity';
-import { PrismaService } from '../../services/prisma.service'; // ✅ ruta corregida
+import { UpdateUserDto } from './dto/update-user.dto';
 import { Task } from '../task/entities/task.entity';
+import { UtilService } from '../../services/util.service';
+import { CreateUserDto } from './dto/create-user.dto';
 
 @Injectable()
 export class UserService {
-  constructor(
-    private prisma: PrismaService, // ✅ eliminado @Inject('MYSQL_CONNECTION')
-  ) {}
 
-  public async getUsers(currentUserId: number): Promise<User[]> {
-    const users = await this.prisma.user.findMany({
-      orderBy: { id: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        lastname: true,      // ✅ corregido de lastName
-        username: true,
-        created_dt: true,    // ✅ corregido de created_at
-        refreshToken: true,  // ✅ agregado (requerido por User entity)
-      },
-      where: {
-        id: { not: currentUserId }
-      }
-    });
-    return users as User[];
+  constructor(
+    @Inject('PG_CONNECTION') private db: any,
+    private prisma: PrismaService,
+    private readonly utilSvc: UtilService
+  ) { }
+
+  login(): string {
+    return 'Autenticación correcta';
   }
 
-  public async getUserById(id: number): Promise<User | null> {
+  async getUsers(): Promise<User[]> {
+    const users = await this.prisma.user.findMany({
+      orderBy: [{ name: 'asc' }],
+      include: { rol: true },
+    });
+    return users.map(({ password, hash, refreshToken, ...safe }) => safe as any);
+  }
+
+  async getUserById(id: number): Promise<User> {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      select: {
-        id: true,
-        name: true,
-        lastname: true,      // ✅ corregido
-        username: true,
-        created_dt: true,    // ✅ corregido
-        refreshToken: true,  // ✅ agregado
-      },
+      include: { rol: true },
     });
-    return user as User | null;
+
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+    }
+
+    const { password, hash, refreshToken, ...safe } = user;
+    return safe as any;
   }
 
-  public async getUserByUsername(username: string): Promise<User[]> {
-    const users = await this.prisma.user.findMany({
-      where: { username },
-      select: {
-        id: true,
-        name: true,
-        lastname: true,      // ✅ corregido
-        username: true,
-        created_dt: true,    // ✅ corregido
-        refreshToken: true,  // ✅ agregado
-      },
-    });
-    return users as User[];
-  }
+  async insertUser(user: CreateUserDto) {
+    const { username, password, ...restOfUser } = user;
 
-  public async getTasksByUser(id: number): Promise<Task[]> {
-    return await this.prisma.task.findMany({
-      where: { user_id: id },
-    });
-  }
+    const sameUser = await this.prisma.user.findUnique({ where: { username } });
+    if (sameUser) {
+      throw new ConflictException(`El usuario con el username '${username}' ya existe`);
+    }
 
-  public async insert(user: CreateUserDto): Promise<User> {
+    const encryptedPassword = await this.utilSvc.hash(password);
+
+    const defaultRol = await this.prisma.rol.findFirst({
+      where: { description: 'EMPLOYEE' },
+    });
+
     const newUser = await this.prisma.user.create({
-      data: user,
+      data: {
+        ...restOfUser,
+        username,
+        password: encryptedPassword,
+        rol_id: defaultRol?.id,
+        refreshToken: '',
+      },
       select: {
         id: true,
         name: true,
-        lastname: true,      // ✅ corregido
+        lastname: true,
         username: true,
-        created_dt: true,    // ✅ corregido
-        refreshToken: true,  // ✅ agregado
+        created_dt: true,
       },
     });
-    return newUser as User;
+
+    return newUser;
   }
 
-  public async update(id: number, userUpdate: UpdateUserDto): Promise<User> {
+  async updateUser(id: number, userUpdate: UpdateUserDto): Promise<User> {
     const user = await this.prisma.user.update({
       where: { id },
       data: userUpdate,
+      select: {
+        id: true,
+        name: true,
+        lastname: true,
+        username: true,
+        created_dt: true,
+      },
     });
-    return user as User;
+    return user as any;
   }
 
-  public async delete(id: number): Promise<Boolean> {
-    try {
-      await this.prisma.user.delete({ where: { id } });
-    } catch (error) {
-      throw new Error('User not found');
+  /**
+   * Eliminar usuario en transacción:
+   * 1. Reasigna todas las tareas del usuario eliminado al admin que ejecuta la acción.
+   * 2. Elimina los logs del usuario.
+   * 3. Elimina al usuario.
+   *
+   * Las tareas NO se pierden — quedan en poder del admin para reasignarlas luego.
+   *
+   * @param id       ID del usuario a eliminar
+   * @param adminId  ID del admin que ejecuta la eliminación (recibe las tareas)
+   */
+  async deleteUser(id: number, adminId: number): Promise<{ deleted: boolean; tasksReassigned: number }> {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
-    return true;
+
+    let tasksReassigned = 0;
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Reasignar tareas del usuario al admin
+      const result = await tx.task.updateMany({
+        where: { user_id: id },
+        data:  { user_id: adminId },
+      });
+      tasksReassigned = result.count;
+
+      // 2. Eliminar logs del usuario (no tienen uso sin el usuario)
+      await tx.logs.deleteMany({ where: { sesion_id: id } });
+
+      // 3. Eliminar al usuario
+      await tx.user.delete({ where: { id } });
+    });
+
+    return { deleted: true, tasksReassigned };
+  }
+
+  async getTaskByUser(id: number): Promise<Task[]> {
+    return await this.prisma.task.findMany({
+      where: { user_id: id },
+    });
   }
 }

@@ -1,8 +1,8 @@
 export class Task {
-  id!: number;
-  name!: string;
-  description!: string;
-  priority!: boolean;
-  created_dt!: Date;  // ✅ corregido de created_at
-  user_id!: number;
+    id: number | undefined;
+    name: string | undefined
+    description: string | undefined;
+    priority: boolean | undefined;
+    user_id: number | undefined;
+    created_dt: Date | undefined;
 }

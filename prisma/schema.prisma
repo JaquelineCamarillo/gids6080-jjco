@@ -3,19 +3,16 @@
 
 // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-//schema.prisma
-
+//prisma/schema.prisma
 generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/prisma/client"
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {
-  provider = "mysql"
-  
+  provider = "postgresql"
 }
-
 
 model Rol {
   id          Int     @id @default(autoincrement())
@@ -36,7 +33,7 @@ model User {
   refreshToken String   @default("")
   rol_id       Int?
   rol          Rol?     @relation(fields: [rol_id], references: [id])
-  logs         logs[]
+  logs         Logs[]
 }
 
 model Task {
@@ -49,14 +46,14 @@ model Task {
   user        User     @relation(fields: [user_id], references: [id])
 }
 
-model logs {
-  id          Int      @id @default(autoincrement())
-  statusCode  Int
-  timestamp    DateTime
-  path        String  @db.MediumText
-  error       String    @db.MediumText
-  erroCode String  @db.MediumText
-  session_id Int?
+model Logs {
+  id         Int      @id @default(autoincrement())
+  statusCode Int
+  timeStamp  DateTime
+  path       String   @db.VarChar(200)
+  error      String   @db.VarChar(200)
+  errorCode  String   @db.VarChar(200)
+  sesion_id  Int?
 
-  user User? @relation(fields: [session_id], references: [id])
+  user User? @relation(fields: [sesion_id], references: [id])
 }

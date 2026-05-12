@@ -1,78 +1,126 @@
-//user.controller.ts
+// src/modules/user/user.controller.ts
 import {
   Body,
   Controller,
   Delete,
   Get,
-  HttpException,
-  HttpStatus,
+  HttpCode,
   Param,
   ParseIntPipe,
   Post,
   Put,
-  Req,            // importado desde @nestjs/common
+  HttpException,
+  NotFoundException,
+  InternalServerErrorException,
+  ForbiddenException,
+  HttpStatus,
   UseGuards,
+  Req,
 } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { User } from './entities/user.entity';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { User } from './entities/user.entity';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { UtilService } from '../../services/util.service';   // ✅ ruta corregida
-import { AuthGuard } from '../../common/guards/auth.guard';  // ✅ ruta corregida
+import { AuthGuard } from '../../common/guards/auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from '../../common/enums/role.enum';
 
-@Controller('api/users')
-@ApiTags('User')
-@UseGuards(AuthGuard)
+@Controller('api/user')
+@ApiTags('Users')
 export class UserController {
-  constructor(
-    private readonly userSvc: UserService,
-    private readonly utilSvc: UtilService,
-  ) {}
+  constructor(private userSvc: UserService) { }
 
+  /** Listar todos los usuarios — solo ADMIN. */
   @Get()
-  public async getUsers(@Req() request: any): Promise<User[]> { // ✅ typo corregido
-    const user = request['user'];
-    return await this.userSvc.getUsers(user.id);
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  public async getUser(): Promise<User[]> {
+    try {
+      return await this.userSvc.getUsers();
+    } catch (error) {
+      throw new InternalServerErrorException('Error al obtener la lista de usuarios');
+    }
   }
 
+  /** Obtener un usuario por ID. */
   @Get(':id')
-  public async getUserById(
-    @Param('id', ParseIntPipe) id: number,
-  ): Promise<User> {
-    const result = await this.userSvc.getUserById(id);
-    if (result == undefined)
-      throw new HttpException(
-        'Usuario con id: ' + id + ' no encontrado',
-        HttpStatus.NOT_FOUND,
-      );
-    return result;
+  @HttpCode(200)
+  @UseGuards(AuthGuard)
+  public async getUserById(@Param('id', ParseIntPipe) id: number): Promise<User> {
+    try {
+      const user = await this.userSvc.getUserById(id);
+      if (!user) throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+      return user;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(`Ocurrió un error al buscar el usuario ${id}`);
+    }
   }
 
+  /** Crear un nuevo usuario. */
   @Post()
-  @ApiOperation({ summary: 'Insert a user in the db' })
-  public insertUser(@Body() user: CreateUserDto): Promise<User> {
-    const result = this.userSvc.insert(user);
-    if (result == undefined)
-      throw new HttpException('Usuario no registrado', HttpStatus.INTERNAL_SERVER_ERROR);
-    return result;
+  @ApiOperation({ summary: 'Registrar un usuario nuevo' })
+  public async insertUser(@Body() user: CreateUserDto): Promise<User> {
+    try {
+      const result = await this.userSvc.insertUser(user);
+      if (!result) throw new InternalServerErrorException('El usuario no pudo ser registrado');
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException('Error interno al registrar el usuario');
+    }
   }
 
-  @Put('/:id')
-  public updateUser(
+  /** Actualizar usuario. */
+  @Put(':id')
+  @UseGuards(AuthGuard)
+  public async updateUser(
     @Param('id', ParseIntPipe) id: number,
     @Body() user: UpdateUserDto,
   ): Promise<User> {
-    return this.userSvc.update(id, user);
+    try {
+      const existing = await this.userSvc.getUserById(id);
+      if (!existing) throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+      return await this.userSvc.updateUser(id, user);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(`Error al actualizar el usuario con ID ${id}`);
+    }
   }
 
+  /**
+   * Eliminar usuario — solo ADMIN.
+   * Las tareas del usuario eliminado se reasignan automáticamente al admin
+   * que ejecuta la acción, para que pueda redistribuirlas luego.
+   * Un admin NO puede eliminarse a sí mismo.
+   */
   @Delete(':id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   public async deleteUser(
+    @Req() request: any,
     @Param('id', ParseIntPipe) id: number,
-  ): Promise<boolean> {
-    const result = await this.userSvc.delete(id);
-    if (!result)
-      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
-    return true;
+  ): Promise<{ deleted: boolean; tasksReassigned: number; message: string }> {
+    const adminId = request['user'].id;
+
+    // Protección: el admin no puede eliminarse a sí mismo
+    if (adminId === id) {
+      throw new ForbiddenException('No puedes eliminarte a ti mismo');
+    }
+
+    try {
+      const result = await this.userSvc.deleteUser(id, adminId);
+      return {
+        ...result,
+        message: result.tasksReassigned > 0
+          ? `Usuario eliminado. ${result.tasksReassigned} tarea(s) reasignada(s) a tu cuenta.`
+          : 'Usuario eliminado exitosamente.',
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException('Usuario no encontrado', HttpStatus.NOT_FOUND);
+    }
   }
 }

@@ -1,28 +1,21 @@
-import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { IsDate, IsOptional, IsString } from "class-validator";
 
-export class UpdateUserDto {
 
-    @IsString({ message: "name es requerido" })
+export class UpdateUserDto{
+    @IsString()
     @IsOptional()
-    @MinLength(3)
-    @MaxLength(100)
     name?: string;
 
-    @IsString({ message: "lastName es requerido" })
+    @IsString()
     @IsOptional()
-    @MinLength(3)
-    @MaxLength(100)
-    lastName?: string;
+    lastname?: string;
 
-    @IsString({ message: "username es requerido" })
+    @IsString()
     @IsOptional()
-    @MinLength(3)
-    @MaxLength(50)
     username?: string;
 
-    @IsString({ message: "password es requerida" })
+    @IsString()
     @IsOptional()
-    @MinLength(6)
-    @MaxLength(255)
     password?: string;
+
 }

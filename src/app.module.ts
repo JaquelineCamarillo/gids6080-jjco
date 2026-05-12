@@ -1,3 +1,4 @@
+//src/app.module.ts
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { AuthModule } from './modules/auth/auth.module';
